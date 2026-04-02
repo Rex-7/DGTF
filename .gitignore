@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# IDEs
+.idea/
+.vscode/
+
+# Project specific data and logs
+Data1.tar.gz
+outputs/
+processed_graphs/
+*.pt
+
+# OS generated files
+.DS_Store
+Thumbs.db
