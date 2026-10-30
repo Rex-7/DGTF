@@ -2,175 +2,25 @@
 
 [![AAAI 2026](https://img.shields.io/badge/AAAI-2026-b31b1b)](https://ojs.aaai.org/index.php/AAAI/article/view/40118)
 
-Official code for the AAAI 2026 paper [DGTF: Cross-Domain Decentralized Graph Learning with Topology-Aware Knowledge Fusion](https://ojs.aaai.org/index.php/AAAI/article/view/40118).
-
-DOI: [10.1609/aaai.v40i34.40118](https://doi.org/10.1609/aaai.v40i34.40118).
+[Paper](https://ojs.aaai.org/index.php/AAAI/article/view/40118) · [DOI 10.1609/aaai.v40i34.40118](https://doi.org/10.1609/aaai.v40i34.40118)
 
 Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and Dongxiao Yu. *Proceedings of the AAAI Conference on Artificial Intelligence*, vol. 40, no. 34, pp. 28839–28847, 2026.
 
-## Overview
-
-The paper studies cross-domain decentralized graph learning (CD-DGL): parties collaborate on graph data without exchanging raw graphs. The abstract names two obstacles. Inconsistent label spaces push local models toward domain-specific bias, so domain-invariant topological knowledge is hard to extract under local supervision. Domain topology shift, together with heterogeneous model architectures, makes direct parameter aggregation infeasible. The paper uses Extended Persistent Homology (EPH) to reveal and quantify that topology shift, then introduces DGTF. As stated in the abstract, the framework has two parts: contrastive learning that extracts task-agnostic topological knowledge, and a topology-aware, model-independent fusion of that knowledge.
-
 <img alt="Figure 1 from the paper: domain gaps and an EPI similarity heatmap" src="assets/intro.png" width="760" />
 
-*(a) Challenges in CD-DGL: molecule, protein, and letter graphs are turned into extended persistence images, which show both shared topology and domain gaps. (b) Pairwise maximum mean discrepancy between those images on eight cross-domain datasets, summarizing where the topologies agree and where they differ.*
+*(a) Molecule, protein, and letter graphs mapped to extended persistence images, with shared topology and domain gaps. (b) Pairwise MMD of those images on eight cross-domain datasets.*
 
-This repository follows that pipeline on TUDataset graph classification. `setupGC.setup_devices_TTG` builds one `Client_GC` per dataset and sets the server to `None`. The training loop does not average client parameters. From the second communication round, each client is given the other clients' persistence-image encoder modules (`cnn` and `PI_tensor_layer`, the code's TopSE) for that round and adds a distillation loss on those modules.
+## Overview
 
-For every graph, `utils.compute_PI_tensor` builds a 4-channel Extended Persistence Image (EPI):
-
-1. Node scores from degree, betweenness, eigenvector, and closeness centrality (`networkx`).
-2. Extended persistence via Gudhi (`gudhi.SimplexTree.extend_filtration` / `extended_persistence`).
-3. A persistence image of size `PI_dim` × `PI_dim` (default 50).
-
-Channels are stacked into one tensor. `add_noise_to_PI` then adds Gaussian noise with scale `0.1` to the tensors that enter training and evaluation. The tensor written to disk is the clean one.
-
-The encoder is `TASSL` (`model.py`), wrapped by `Split_model`:
-
-- A stack of `GCNConv` layers, each followed by an `MLP`. `TASSL` builds `num_layers - 1` convolutions. Depth and width are the per-dataset pair from `get_dataset_specific_params`, not the `--num_layers` / `--hidden_dim` flags.
-- Node embeddings go through a tensor layer (`tltorch.TCL` or `tltorch.TRL`, flag `--tensor_layer_type`) and are averaged over nodes.
-- The persistence image goes through `CNN` (two conv–batch-norm–ReLU–max-pool blocks) and a second tensor layer.
-- Contrastive mode (`mode='cl'`) encodes two augmented views. `TASSL.loss_cal` is an in-batch contrastive loss (temperature `0.2`) on the GCN tensor and on the PI tensor. The sum is `gcn_tensor_loss + lambda1 * pi_tensor_loss`.
-- Prediction mode concatenates the two tensors, passes them through `output_tensor_layer` and a linear attention map (`attend`), then `MLP_output` (batch-norm, ReLU, dropout, linear) for class logits.
-
-Augmentations come from `aug.py` (`drop_nodes`, `permute_edges`, `subgraph`, `mask_nodes`). The pair used for each dataset is fixed in `get_optimal_augmentations`.
-
-`training.run_DGTF_joint` loops for `--num_rounds` (default 200). Each round runs `--local_epoch` epochs of `Client_GC.joint_train` (default 1). Round 1 leaves neighbor modules empty, so the loss is contrastive only. Later rounds set `neibor_models` and add `alpha * distillation`, where `Split_model.distillation` projects neighbor PI features, weights them with the `CCA` module, and applies `contrastive_loss`. After each round the code fine-tunes `head`, `attend`, and `output_tensor_layer` for 40 epochs (`linear_probe`), logs test accuracy and macro-F1, and restores those parameters. After the last round it fine-tunes for 100 epochs and keeps that run. Inside `linear_probe`, the epoch with the highest test accuracy is the one whose weights are kept for the metric (and, on the final call, for the returned model).
-
-## Framework
+Cross-domain decentralized graph learning lets parties collaborate without sharing raw graphs. Inconsistent labels and topology shift across domains make ordinary parameter averaging a poor fit, especially when client models differ. DGTF uses extended persistent homology to measure that shift, then transfers task-agnostic topology with contrastive learning and a model-independent fusion step. Each TUDataset in a run is one client.
 
 <img alt="Figure 2 from the paper: the DGTF framework" src="assets/framework.png" width="860" />
 
-*Figure 2 of the paper.* Topology-aware self-supervised learning extracts domain-invariant topology from EPIs and semantic context from node attributes with contrastive losses. Topology-aware adaptive knowledge aggregation then fuses neighboring TopSE modules without a central server. The image is a crop of that figure from the [open-access PDF](https://ojs.aaai.org/index.php/AAAI/article/download/40118/44079).
+*Figure 2.* Local contrastive learning on persistence images and node features, then server-free fusion of the topology encoder.
 
-## Repository structure
+## Installation
 
-```text
-main.py            CLI, seeds, output paths, call to run_DGTF_joint
-setupGC.py         Data groups, TU loading, PI cache, one client per dataset
-training.py        Communication rounds, fine-tune, CSV rows, TensorBoard scalars
-client.py          Client_GC joint training, distillation, fine-tune, evaluation
-model.py           TASSL, Split_model, CCA, TCL/TRL fusion
-cnn.py             CNN over persistence images
-mlp.py             MLP blocks and MLP_output classifier
-utils.py           Persistence diagrams and images, padding, split stats
-aug.py             TUDataset_aug loader and graph augmentations
-requirements.txt   Pinned Python packages (install needs the cu124 index)
-LICENSE            MIT license; copyright holders are the paper authors
-README.md          This file
-.gitignore         Python caches, training outputs, processed dataset files
-assets/intro.png      Crop of Figure 1 from the AAAI PDF
-assets/framework.png  Crop of Figure 2 from the AAAI PDF
-Data1/TUDataset/   Committed TU raw text, one file per line below. PyG processed/ caches are gitignored
-```
-
-<details>
-<summary>Committed raw files under <code>Data1/TUDataset</code></summary>
-
-- `Data1/TUDataset/AIDS/raw/AIDS_A.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_edge_labels.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_graph_indicator.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_graph_labels.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_label_readme.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_node_attributes.txt`
-- `Data1/TUDataset/AIDS/raw/AIDS_node_labels.txt`
-- `Data1/TUDataset/BZR/raw/BZR_A.txt`
-- `Data1/TUDataset/BZR/raw/BZR_graph_indicator.txt`
-- `Data1/TUDataset/BZR/raw/BZR_graph_labels.txt`
-- `Data1/TUDataset/BZR/raw/BZR_node_attributes.txt`
-- `Data1/TUDataset/BZR/raw/BZR_node_labels.txt`
-- `Data1/TUDataset/BZR/raw/README.txt`
-- `Data1/TUDataset/COX2/raw/COX2_A.txt`
-- `Data1/TUDataset/COX2/raw/COX2_graph_indicator.txt`
-- `Data1/TUDataset/COX2/raw/COX2_graph_labels.txt`
-- `Data1/TUDataset/COX2/raw/COX2_node_attributes.txt`
-- `Data1/TUDataset/COX2/raw/COX2_node_labels.txt`
-- `Data1/TUDataset/COX2/raw/README.txt`
-- `Data1/TUDataset/DD/raw/DD_A.txt` — present on disk; not in any named `data_group`
-- `Data1/TUDataset/DD/raw/DD_graph_indicator.txt`
-- `Data1/TUDataset/DD/raw/DD_graph_labels.txt`
-- `Data1/TUDataset/DD/raw/DD_node_labels.txt`
-- `Data1/TUDataset/DD/raw/README.txt`
-- `Data1/TUDataset/DHFR/raw/DHFR_A.txt`
-- `Data1/TUDataset/DHFR/raw/DHFR_graph_indicator.txt`
-- `Data1/TUDataset/DHFR/raw/DHFR_graph_labels.txt`
-- `Data1/TUDataset/DHFR/raw/DHFR_node_attributes.txt`
-- `Data1/TUDataset/DHFR/raw/DHFR_node_labels.txt`
-- `Data1/TUDataset/DHFR/raw/README.txt`
-- `Data1/TUDataset/ENZYMES/raw/ENZYMES_A.txt` — present on disk; not in any named `data_group`
-- `Data1/TUDataset/ENZYMES/raw/ENZYMES_graph_indicator.txt`
-- `Data1/TUDataset/ENZYMES/raw/ENZYMES_graph_labels.txt`
-- `Data1/TUDataset/ENZYMES/raw/ENZYMES_node_attributes.txt`
-- `Data1/TUDataset/ENZYMES/raw/ENZYMES_node_labels.txt`
-- `Data1/TUDataset/ENZYMES/raw/README.txt`
-- `Data1/TUDataset/IMDB-BINARY/raw/IMDB-BINARY_A.txt`
-- `Data1/TUDataset/IMDB-BINARY/raw/IMDB-BINARY_graph_indicator.txt`
-- `Data1/TUDataset/IMDB-BINARY/raw/IMDB-BINARY_graph_labels.txt`
-- `Data1/TUDataset/IMDB-MULTI/raw/IMDB-MULTI_A.txt`
-- `Data1/TUDataset/IMDB-MULTI/raw/IMDB-MULTI_graph_indicator.txt`
-- `Data1/TUDataset/IMDB-MULTI/raw/IMDB-MULTI_graph_labels.txt`
-- `Data1/TUDataset/KKI/raw/KKI_A.txt`
-- `Data1/TUDataset/KKI/raw/KKI_graph_indicator.txt`
-- `Data1/TUDataset/KKI/raw/KKI_graph_labels.txt`
-- `Data1/TUDataset/KKI/raw/KKI_node_labels.txt`
-- `Data1/TUDataset/KKI/raw/readme.txt`
-- `Data1/TUDataset/Letter-high/raw/Letter-high_A.txt`
-- `Data1/TUDataset/Letter-high/raw/Letter-high_graph_indicator.txt`
-- `Data1/TUDataset/Letter-high/raw/Letter-high_graph_labels.txt`
-- `Data1/TUDataset/Letter-high/raw/Letter-high_label_readme.txt`
-- `Data1/TUDataset/Letter-high/raw/Letter-high_node_attributes.txt`
-- `Data1/TUDataset/Letter-low/raw/Letter-low_A.txt`
-- `Data1/TUDataset/Letter-low/raw/Letter-low_graph_indicator.txt`
-- `Data1/TUDataset/Letter-low/raw/Letter-low_graph_labels.txt`
-- `Data1/TUDataset/Letter-low/raw/Letter-low_label_readme.txt`
-- `Data1/TUDataset/Letter-low/raw/Letter-low_node_attributes.txt`
-- `Data1/TUDataset/Letter-med/raw/Letter-med_A.txt`
-- `Data1/TUDataset/Letter-med/raw/Letter-med_graph_indicator.txt`
-- `Data1/TUDataset/Letter-med/raw/Letter-med_graph_labels.txt`
-- `Data1/TUDataset/Letter-med/raw/Letter-med_label_readme.txt`
-- `Data1/TUDataset/Letter-med/raw/Letter-med_node_attributes.txt`
-- `Data1/TUDataset/MUTAG/raw/MUTAG_A.txt`
-- `Data1/TUDataset/MUTAG/raw/MUTAG_edge_labels.txt`
-- `Data1/TUDataset/MUTAG/raw/MUTAG_graph_indicator.txt`
-- `Data1/TUDataset/MUTAG/raw/MUTAG_graph_labels.txt`
-- `Data1/TUDataset/MUTAG/raw/MUTAG_node_labels.txt`
-- `Data1/TUDataset/MUTAG/raw/README.txt`
-- `Data1/TUDataset/NCI1/raw/NCI1_A.txt`
-- `Data1/TUDataset/NCI1/raw/NCI1_graph_indicator.txt`
-- `Data1/TUDataset/NCI1/raw/NCI1_graph_labels.txt`
-- `Data1/TUDataset/NCI1/raw/NCI1_node_labels.txt`
-- `Data1/TUDataset/NCI1/raw/README.txt`
-- `Data1/TUDataset/OHSU/raw/OHSU_A.txt`
-- `Data1/TUDataset/OHSU/raw/OHSU_graph_indicator.txt`
-- `Data1/TUDataset/OHSU/raw/OHSU_graph_labels.txt`
-- `Data1/TUDataset/OHSU/raw/OHSU_node_labels.txt`
-- `Data1/TUDataset/OHSU/raw/readme.txt`
-- `Data1/TUDataset/PROTEINS/raw/PROTEINS_A.txt`
-- `Data1/TUDataset/PROTEINS/raw/PROTEINS_graph_indicator.txt`
-- `Data1/TUDataset/PROTEINS/raw/PROTEINS_graph_labels.txt`
-- `Data1/TUDataset/PROTEINS/raw/PROTEINS_node_attributes.txt`
-- `Data1/TUDataset/PROTEINS/raw/PROTEINS_node_labels.txt`
-- `Data1/TUDataset/PROTEINS/raw/README.txt`
-- `Data1/TUDataset/PTC_MR/raw/PTC_MR_A.txt`
-- `Data1/TUDataset/PTC_MR/raw/PTC_MR_edge_labels.txt`
-- `Data1/TUDataset/PTC_MR/raw/PTC_MR_graph_indicator.txt`
-- `Data1/TUDataset/PTC_MR/raw/PTC_MR_graph_labels.txt`
-- `Data1/TUDataset/PTC_MR/raw/PTC_MR_node_labels.txt`
-- `Data1/TUDataset/PTC_MR/raw/README.txt`
-- `Data1/TUDataset/Peking_1/raw/Peking_1_A.txt`
-- `Data1/TUDataset/Peking_1/raw/Peking_1_graph_indicator.txt`
-- `Data1/TUDataset/Peking_1/raw/Peking_1_graph_labels.txt`
-- `Data1/TUDataset/Peking_1/raw/Peking_1_node_labels.txt`
-- `Data1/TUDataset/Peking_1/raw/readme.txt`
-
-</details>
-
-## Environment
-
-The dependency pins target **Python 3.9** (the stack was specified with `numpy==1.24.3` and `scipy==1.10.1`, which are not published for Python 3.12). `python==3.9.21` is not a pip package and is not listed in `requirements.txt`.
-
-`torch==2.4.0+cu124` is the CUDA 12.4 wheel. It is not on PyPI. `requirements.txt` sets `--extra-index-url https://download.pytorch.org/whl/cu124` so a normal `pip install -r` can resolve it. The default `--device` is `cuda:0`.
+Python 3.9. `requirements.txt` pulls `torch==2.4.0+cu124` from the CUDA 12.4 index.
 
 ```bash
 python3.9 -m venv .venv
@@ -179,200 +29,35 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-`tensorly-torch` provides `tltorch` (`TCL`, `TRL`). `gudhi` is imported by `utils.py` at import time, including for `python main.py --help`.
+## Quick Start
 
-TensorBoard event files are written with `tensorboardX`. A viewer is not pinned; install `tensorboard` separately if you want the UI.
-
-## Data
-
-Raw TU files are already under `Data1/TUDataset/<name>/raw/` (`--datapath` defaults to `./Data1`). The loader asks for `*_A.txt` and `*_graph_indicator.txt`. Graph labels, and node or edge labels and attributes when present, ship in the same `raw/` directories. The first run writes PyG caches to `Data1/TUDataset/<name>/processed/` and PI tensors under `--save_dir` (default `./processed_graphs/`).
-
-`prepareData_multiDS` keeps a 90/10 train/test split (`test_size=0.1`, `random_state=args.seed`, not stratified). It does not build a validation loader. The `seed=` argument of `prepareData_multiDS` is unused; `main.py` passes `seed_dataSplit = 123`, and the split follows `--seed` (default 789).
-
-Feature construction in `prepareData_multiDS`:
-
-| Datasets | Node features |
-| --- | --- |
-| `IMDB-BINARY` | `OneHotDegree(135)` |
-| `IMDB-MULTI` | `OneHotDegree(88)` |
-| `Letter-high`, `Letter-med`, `Letter-low` | `use_node_attr=True` |
-| Every other name in the groups below | Default `read_tu_data` features |
-
-Named groups (`--data_group`, default `sm`):
-
-| `data_group` | Datasets, in load order |
-| --- | --- |
-| `sm` | MUTAG, BZR, COX2, DHFR, PTC_MR, AIDS, NCI1 |
-| `bio` | KKI, OHSU, Peking_1, PROTEINS |
-| `sn` | IMDB-MULTI, IMDB-BINARY |
-| `cv` | Letter-high, Letter-med, Letter-low |
-| `sm-bio` | `sm` then `bio` |
-| `sm-bio-cv` | `sm`, `bio`, then `cv` |
-| `sm-bio-cv-sn` | `sm`, `bio`, `cv`, then `sn` |
-
-Any other string is treated as a single dataset name (`datasets = [group]`). That path only finishes setup for names listed in `get_dataset_specific_params` (the 16 datasets in the table below).
-
-`Data1/TUDataset` also contains **DD** and **ENZYMES**. They are not members of any named group, and they have no row in `get_dataset_specific_params`, so `--data_group DD` or `--data_group ENZYMES` raises `ValueError` when clients are built. `get_optimal_augmentations` does contain entries for `DD`, `PTC_FM`, and `REDDIT-BINARY`; those two extra names are not in this checkout.
-
-Per-dataset depth and width passed into `TASSL` as `(num_layers, hidden_dim)`, and the augmentation pair `(aug1, aug2)`:
-
-| Dataset | `num_layers` | `hidden_dim` | aug1 | aug2 |
-| --- | --- | --- | --- | --- |
-| AIDS | 4 | 64 | dnodes | pedges |
-| BZR | 4 | 16 | dnodes | mask_nodes |
-| COX2 | 3 | 64 | dnodes | subgraph |
-| DHFR | 5 | 64 | pedges | none |
-| IMDB-BINARY | 5 | 64 | subgraph | none |
-| IMDB-MULTI | 3 | 16 | subgraph | none |
-| KKI | 5 | 16 | dnodes | none |
-| Letter-high | 5 | 64 | pedges | none |
-| Letter-low | 3 | 64 | pedges | none |
-| Letter-med | 4 | 64 | pedges | none |
-| MUTAG | 4 | 32 | dnodes | pedges |
-| NCI1 | 5 | 64 | dnodes | mask_nodes |
-| OHSU | 4 | 16 | dnodes | none |
-| PROTEINS | 3 | 32 | dnodes | pedges |
-| PTC_MR | 3 | 32 | dnodes | pedges |
-| Peking_1 | 3 | 32 | dnodes | none |
-
-If either augmentation is `dnodes` or `subgraph`, the client is constructed with `aug='dnodes'` so `match_nodes` runs. Otherwise `aug` is `None`. `pedges` is `permute_edges`. When `aug2` is `none`, the second view and its PI tensor fall back to the original graph and the original PI.
-
-## Usage
-
-From the repository root, with the environment above and raw data at `./Data1/TUDataset` (already committed):
+Raw TU files are already in `Data1/TUDataset`. `--data_group` is `sm` (default), `bio`, `sn`, `cv`, `sm-bio`, `sm-bio-cv`, or `sm-bio-cv-sn`.
 
 ```bash
-# small molecules (default --data_group sm)
 python main.py
-
-python main.py --data_group sm
-python main.py --data_group bio
-python main.py --data_group sn
-python main.py --data_group cv
 python main.py --data_group sm-bio
-python main.py --data_group sm-bio-cv
 python main.py --data_group sm-bio-cv-sn
-
-# one dataset that has a row in get_dataset_specific_params
-python main.py --data_group MUTAG
 ```
 
-The default run is 200 rounds on `cuda:0` and computes persistence images for every graph in the group before training. `sm` includes NCI1.
-
-With the pinned `torch_geometric==2.5.2`, `read_tu_data` returns `(data, slices, sizes)`. In `aug.py`, the `MUTAG` branch unpacks two values and every other dataset unpacks three. `python main.py` loads MUTAG first, raises `ValueError: too many values to unpack (expected 2)` inside `TUDataset_aug.process`, and does not start a training round. The Python files are unchanged.
-
-### Arguments
-
-Defaults are the `argparse` defaults in `main.py`.
-
-| Argument | Default | Meaning |
+| Flag | Default | Meaning |
 | --- | --- | --- |
-| `--device` | `cuda:0` | Device string. PI tensors are moved here during preprocessing. Joint training and fine-tuning move the client module to this device. |
-| `--alg` | `joint` | Written into log file names and TensorBoard tags. `main.py` always calls `run_DGTF_joint`. |
-| `--alpha` | `4` | Coefficient on the distillation loss: contrastive loss + `alpha` × distillation loss. |
-| `--lambda1` | `0.3` | Coefficient on the PI contrastive term inside `TASSL` (`gcn_tensor_loss + lambda1 * pi_tensor_loss`). The help string says "lambda for TRM loss". |
-| `--num_rounds` | `200` | Communication rounds. |
-| `--local_epoch` | `1` | Local joint-training epochs per round. The 40-epoch per-round fine-tune and the 100-epoch final fine-tune are constants in `training.py`. |
-| `--lr` | `0.0001` | Adam learning rate for joint training. `Client_GC` builds that Adam itself (`weight_decay` left at the PyTorch default, 0). |
-| `--weight_decay` | `5e-4` | Passed to an Adam constructed in `setup_devices_TTG`. `Client_GC.__init__` replaces `self.optimizer` and does not use this value. |
-| `--finetune_lr` | `0.01` | Adam learning rate for the fine-tune in `linear_probe`. Also part of the default CSV file name. |
-| `--batch_size` | `64` | Batch size for joint training and fine-tuning. The contrastive loop slices each batch into micro-batches of 8. |
-| `--seed` | `789` | Seed for `random`, NumPy, and PyTorch, and `random_state` of the 90/10 split. |
-| `--datapath` | `./Data1` | Directory that contains `TUDataset/`. |
-| `--outbase` | `./outputs` | Root for the CSV and TensorBoard directories. |
-| `--repeat` | `None` | If omitted, the CSV is `acc-seed<seed>_ftlr<finetune_lr>.csv`. If set, the CSV is `<repeat>_accuracy_DGTF_GC.csv`. The value is also embedded in the TensorBoard run directory name. |
-| `--data_group` | `sm` | Group name, or a single dataset name. See Data. |
-| `--sublevel_filtration_methods` | `degree betweenness closeness eigenvector` | Parsed only. PI computation and `TASSL` use the hardcoded list `degree`, `betweenness`, `eigenvector`, `closeness`. |
-| `--PI_dim` | `50` | Height and width of each persistence image. Also part of the PI cache file name. |
-| `--num_layers` | `3` | Parsed only. Help text says the default is 5. Depth comes from `get_dataset_specific_params`. |
-| `--num_mlp_layers` | `2` | `MLP` depth excluding the input layer (1 means a single linear layer). This flag is passed into `TASSL`. |
-| `--hidden_dim` | `16` | Parsed only. Help text says the default is 64. Width comes from `get_dataset_specific_params`. |
-| `--final_dropout` | `0.5` | Dropout inside `MLP_output`. |
-| `--tensor_layer_type` | `TCL` | `TCL` or `TRL` (choices are enforced). |
-| `--node_pooling` | `True` | `action="store_false"`, so passing the flag sets it to `False`. `TASSL.__init__` accepts the value and never reads it. |
-| `--save_dir` | `./` | Directory for `processed_graphs/` and the round-results text log. |
+| `--data_group` | `sm` | Which datasets share the run |
+| `--device` | `cuda:0` | Training device |
+| `--num_rounds` | `200` | Communication rounds |
+| `--seed` | `789` | Random seed and train/test split |
+| `--tensor_layer_type` | `TCL` | `TCL` or `TRL` |
 
-### Outputs
-
-CSV (one row per client plus a `mean` row, columns `test_acc` and `test_f1_macro`):
-
-- `--repeat` omitted: `outputs/raw/<data_group>/acc-seed<seed>_ftlr<finetune_lr>.csv`
-- `--repeat` set: `outputs/raw/<data_group>/<repeat>_accuracy_DGTF_GC.csv`
-
-The CSV is appended (`mode='a'`). A header is written when the file does not already exist.
-
-TensorBoard run directory:
-
-```text
-outputs/raw/tensorboard/<data_group>_<alg>__<repeat>_<YYYYmmdd_HHMMSS>/
-```
-
-Scalars: `Round_Finetune/Mean_Acc_<alg>`, `Round_Finetune/Mean_F1_Macro_<alg>`, and `Test/Loss/Mean_<alg>` (the mean joint-training loss of that round).
-
-```bash
-tensorboard --logdir outputs/raw/tensorboard
-```
-
-Round log (overwritten each run, default path is the repository root because `--save_dir` defaults to `./`):
-
-```text
-<save_dir>/<alg>_<data_group>_local-epoch_<local_epoch>-a<alpha>_la<lambda1>_round_results_seed<seed>.txt
-```
-
-`processed_graphs/` holds `{name}_{PI_dim}_PI.pt` and `{name}_{PI_dim}_{aug}_PI.pt`. The loader also looks for `{name}_processed.pt`, `{name}_aug1_processed.pt`, and `{name}_aug2_processed.pt`, but the branch that builds graphs does not `torch.save` those three files.
+Accuracy CSV files and TensorBoard logs are written under `outputs/raw/`.
 
 ## Results
 
-The numbers below are copied from the paper. They were not recomputed in this repository. The paper reports peak accuracy and macro-F1, averaged over clients (Evaluation Metrics). It sets λ = 0.3 and chooses α from {2, 4, 5}. A dash means the paper marks that method as not applicable.
-
-DGTF row of Table 1 (bold in the paper):
-
-| Setting (`data_group`) | Accuracy | Macro-F1 | Source |
-| --- | --- | --- | --- |
-| `sm` | 82.64 | 75.72 | Table 1, column SM |
-| `sm-bio` | 83.39 | 76.29 | Table 1, column SM-BIO |
-| `sm-bio-cv` | 78.77 | 72.48 | Table 1, column SM-BIO-CV |
-| `sm-bio-cv-sn` | 76.48 | 70.65 | Table 1, column SM-BIO-CV-SN |
-
-Full comparison from Table 1. Each client owns one dataset. The paper bolds the best entry in each column and underlines the second best; those marks are not repeated here.
+Peak accuracy and macro-F1 from Table 1 of the [paper](https://ojs.aaai.org/index.php/AAAI/article/view/40118), averaged over clients. FedStar+FedMRL and FedSSP+MH-pFLID are the FedStar and FedSSP rows with the highest accuracy when those four settings are averaged. Full comparisons and ablations are in the paper.
 
 | Method | SM ACC | SM F1 | SM-BIO ACC | SM-BIO F1 | SM-BIO-CV ACC | SM-BIO-CV F1 | SM-BIO-CV-SN ACC | SM-BIO-CV-SN F1 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GCN+Local | 77.77 | 70.68 | 71.84 | 64.98 | 70.59 | 65.50 | 68.94 | 63.58 |
-| GCN+FML | 76.60 | 63.43 | 73.61 | 65.25 | 71.07 | 63.68 | 70.28 | 63.10 |
-| GCN+MH-PFLID | 79.65 | 73.22 | 72.71 | 65.41 | 72.84 | 66.78 | 71.07 | 63.88 |
-| GCN+FedMRL | 65.49 | 40.10 | 64.60 | 43.34 | 53.39 | 36.11 | 49.30 | 37.21 |
-| GCN+FedType | 74.21 | 60.18 | 68.03 | 56.27 | 64.71 | 55.52 | 65.91 | 55.77 |
-| GCN+FedAKT | 75.17 | 60.95 | 68.75 | 56.73 | 66.41 | 57.40 | 67.51 | 57.00 |
-| GCFL+Local | 76.47 | 65.15 | 71.89 | 62.47 | 73.98 | 66.93 | 73.75 | 66.99 |
-| GCFL+FML | 77.06 | 62.37 | 71.78 | 60.78 | 68.01 | 60.77 | 71.91 | 66.67 |
-| GCFL+MH-PFLID | 75.71 | 59.62 | 72.65 | 60.36 | 61.21 | 47.81 | 69.00 | 60.04 |
-| GCFL+FedMRL | 61.74 | 44.90 | 60.87 | 47.82 | 55.42 | 43.32 | 49.33 | 33.23 |
-| GCFL+FedType | 78.23 | 63.70 | 71.01 | 60.81 | 70.89 | 61.97 | 68.79 | 60.35 |
-| GCFL+FedAKT | 72.34 | 59.79 | 68.16 | 54.34 | 67.32 | 57.45 | 67.22 | 60.02 |
-| FedStar+Local | 77.55 | 67.69 | 75.52 | 68.37 | 75.15 | 71.37 | 72.63 | 68.54 |
-| FedStar+FML | 77.93 | 65.11 | 71.67 | 58.40 | 72.55 | 63.90 | 72.63 | 68.54 |
-| FedStar+MH-pFLID | 78.46 | 67.81 | 73.14 | 62.84 | 74.42 | 66.03 | 73.37 | 67.94 |
 | FedStar+FedMRL | 78.04 | 70.67 | 77.74 | 71.72 | 77.31 | 72.12 | 75.50 | 70.45 |
-| FedStar+FedType | 79.31 | 66.97 | 72.10 | 61.04 | 73.06 | 64.65 | 68.99 | 60.93 |
-| FedStar+FedAKT | 74.33 | 60.35 | 69.02 | 54.69 | 67.89 | 56.50 | 67.21 | 56.55 |
-| FedSSP+Local | 78.45 | 75.34 | 73.01 | 67.46 | 77.56 | 71.82 | 75.41 | 71.64 |
-| FedSSP+FML | 76.62 | 66.41 | 75.84 | 71.21 | 74.72 | 71.75 | 73.40 | 70.60 |
 | FedSSP+MH-pFLID | 80.44 | 73.85 | 78.05 | 74.83 | 77.14 | 71.32 | 74.00 | 70.11 |
-| FedSSP+FedMRL | - | - | - | - | - | - | - | - |
-| FedSSP+FedType | 79.78 | 72.53 | 72.42 | 67.80 | 76.89 | 70.13 | 73.92 | 70.22 |
-| FedSSP+FedAKT | - | - | - | - | - | - | - | - |
-| DGTF (ours) | 82.64 | 75.72 | 83.39 | 76.29 | 78.77 | 72.48 | 76.48 | 70.65 |
-
-Table 2 (ablation). The full DGTF row matches the accuracy columns of Table 1 for those three settings.
-
-| Method | SM-BIO | SM-BIO-CV | SM-BIO-CV-SN |
-| --- | --- | --- | --- |
-| DGTF w/o TRM | 75.48 | 72.72 | 69.07 |
-| DGTF w/o SCM | 77.42 | 62.85 | 61.92 |
-| DGTF w/o CCA | 79.97 | 76.14 | 73.55 |
-| DGTF w/o SSL | 76.81 | 70.79 | 67.77 |
-| DGTF | 83.39 | 78.77 | 76.48 |
+| **DGTF** | **82.64** | **75.72** | **83.39** | **76.29** | **78.77** | **72.48** | **76.48** | **70.65** |
 
 ## Citation
 
@@ -390,13 +75,13 @@ Table 2 (ablation). The full DGTF row matches the accuracy columns of Table 1 fo
 }
 ```
 
-## License
-
-This repository is released under the [MIT License](LICENSE). The copyright line is `Copyright (c) 2026 Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and Dongxiao Yu`. The AAAI PDF itself is copyrighted by the Association for the Advancement of Artificial Intelligence. Confirm that MIT is the license you want for this code before relying on it.
-
 ## Acknowledgements
 
 Our implementation builds upon FedStar and FedSSP. We thank the authors for releasing their code.
 
 - FedStar: [Federated Learning on Non-IID Graphs via Structural Knowledge Sharing](https://ojs.aaai.org/index.php/AAAI/article/view/26187), AAAI 2023. [arXiv:2211.13009](https://arxiv.org/abs/2211.13009). Code: [yuetan031/FedStar](https://github.com/yuetan031/FedStar).
 - FedSSP: [FedSSP: Federated Graph Learning with Spectral Knowledge and Personalized Preference](https://proceedings.neurips.cc/paper_files/paper/2024/hash/3d226fb8fbd6ee6ec70d0427f1319707-Abstract-Conference.html), NeurIPS 2024. [arXiv:2410.20105](https://arxiv.org/abs/2410.20105). Code: [OakleyTan/FedSSP](https://github.com/OakleyTan/FedSSP).
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and Dongxiao Yu.
