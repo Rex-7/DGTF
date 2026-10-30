@@ -1,17 +1,67 @@
-# Python cache
+# Byte-compiled / optimized
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
 
-# IDEs
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+.installed.cfg
+pip-wheel-metadata/
+wheels/
+
+# Installers and test / type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Virtual environments and local secrets
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# Editors
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-# Project specific data and logs
-Data1.tar.gz
-outputs/
-processed_graphs/
-*.pt
-
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
+
+# Training outputs, TensorBoard event files, and round logs.
+# Round logs default to the repo root (--save_dir ./).
+outputs/
+runs/
+events.out.tfevents.*
+*_round_results_seed*.txt
+
+# Generated dataset caches. Raw TU files under Data1/TUDataset/*/raw/ stay tracked.
+processed_graphs/
+**/processed/
+*.pt
+*.pth
+*.ckpt
+
+# Local archive of the raw data, if created. Do not ignore Data1/ itself.
+Data1.tar.gz
