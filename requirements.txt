@@ -1,4 +1,10 @@
-python==3.9.21
+# Python 3.9.
+# torch==2.4.0+cu124 is not published on PyPI. The extra index below is required.
+# Install (from a Python 3.9 environment):
+#   python -m pip install --upgrade pip
+#   pip install -r requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cu124
+
 torch==2.4.0+cu124
 torch_geometric==2.5.2
 numpy==1.24.3
