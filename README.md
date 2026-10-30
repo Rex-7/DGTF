@@ -323,56 +323,13 @@ Round log (overwritten each run, default path is the repository root because `--
 
 ## Results
 
-The numbers below are copied from the paper. They were not recomputed in this repository. The paper reports peak accuracy and macro-F1, averaged over clients (Evaluation Metrics). It sets λ = 0.3 and chooses α from {2, 4, 5}. A dash means the paper marks that method as not applicable.
-
-DGTF row of Table 1 (bold in the paper):
-
-| Setting (`data_group`) | Accuracy | Macro-F1 | Source |
-| --- | --- | --- | --- |
-| `sm` | 82.64 | 75.72 | Table 1, column SM |
-| `sm-bio` | 83.39 | 76.29 | Table 1, column SM-BIO |
-| `sm-bio-cv` | 78.77 | 72.48 | Table 1, column SM-BIO-CV |
-| `sm-bio-cv-sn` | 76.48 | 70.65 | Table 1, column SM-BIO-CV-SN |
-
-Full comparison from Table 1. Each client owns one dataset. The paper bolds the best entry in each column and underlines the second best; those marks are not repeated here.
+Peak accuracy and macro-F1 from Table 1 of the [paper](https://ojs.aaai.org/index.php/AAAI/article/view/40118), averaged over clients. FedStar+FedMRL and FedSSP+MH-pFLID are the FedStar and FedSSP rows with the highest accuracy when those four settings are averaged. Full comparisons and ablations are in the paper.
 
 | Method | SM ACC | SM F1 | SM-BIO ACC | SM-BIO F1 | SM-BIO-CV ACC | SM-BIO-CV F1 | SM-BIO-CV-SN ACC | SM-BIO-CV-SN F1 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GCN+Local | 77.77 | 70.68 | 71.84 | 64.98 | 70.59 | 65.50 | 68.94 | 63.58 |
-| GCN+FML | 76.60 | 63.43 | 73.61 | 65.25 | 71.07 | 63.68 | 70.28 | 63.10 |
-| GCN+MH-PFLID | 79.65 | 73.22 | 72.71 | 65.41 | 72.84 | 66.78 | 71.07 | 63.88 |
-| GCN+FedMRL | 65.49 | 40.10 | 64.60 | 43.34 | 53.39 | 36.11 | 49.30 | 37.21 |
-| GCN+FedType | 74.21 | 60.18 | 68.03 | 56.27 | 64.71 | 55.52 | 65.91 | 55.77 |
-| GCN+FedAKT | 75.17 | 60.95 | 68.75 | 56.73 | 66.41 | 57.40 | 67.51 | 57.00 |
-| GCFL+Local | 76.47 | 65.15 | 71.89 | 62.47 | 73.98 | 66.93 | 73.75 | 66.99 |
-| GCFL+FML | 77.06 | 62.37 | 71.78 | 60.78 | 68.01 | 60.77 | 71.91 | 66.67 |
-| GCFL+MH-PFLID | 75.71 | 59.62 | 72.65 | 60.36 | 61.21 | 47.81 | 69.00 | 60.04 |
-| GCFL+FedMRL | 61.74 | 44.90 | 60.87 | 47.82 | 55.42 | 43.32 | 49.33 | 33.23 |
-| GCFL+FedType | 78.23 | 63.70 | 71.01 | 60.81 | 70.89 | 61.97 | 68.79 | 60.35 |
-| GCFL+FedAKT | 72.34 | 59.79 | 68.16 | 54.34 | 67.32 | 57.45 | 67.22 | 60.02 |
-| FedStar+Local | 77.55 | 67.69 | 75.52 | 68.37 | 75.15 | 71.37 | 72.63 | 68.54 |
-| FedStar+FML | 77.93 | 65.11 | 71.67 | 58.40 | 72.55 | 63.90 | 72.63 | 68.54 |
-| FedStar+MH-pFLID | 78.46 | 67.81 | 73.14 | 62.84 | 74.42 | 66.03 | 73.37 | 67.94 |
 | FedStar+FedMRL | 78.04 | 70.67 | 77.74 | 71.72 | 77.31 | 72.12 | 75.50 | 70.45 |
-| FedStar+FedType | 79.31 | 66.97 | 72.10 | 61.04 | 73.06 | 64.65 | 68.99 | 60.93 |
-| FedStar+FedAKT | 74.33 | 60.35 | 69.02 | 54.69 | 67.89 | 56.50 | 67.21 | 56.55 |
-| FedSSP+Local | 78.45 | 75.34 | 73.01 | 67.46 | 77.56 | 71.82 | 75.41 | 71.64 |
-| FedSSP+FML | 76.62 | 66.41 | 75.84 | 71.21 | 74.72 | 71.75 | 73.40 | 70.60 |
 | FedSSP+MH-pFLID | 80.44 | 73.85 | 78.05 | 74.83 | 77.14 | 71.32 | 74.00 | 70.11 |
-| FedSSP+FedMRL | - | - | - | - | - | - | - | - |
-| FedSSP+FedType | 79.78 | 72.53 | 72.42 | 67.80 | 76.89 | 70.13 | 73.92 | 70.22 |
-| FedSSP+FedAKT | - | - | - | - | - | - | - | - |
-| DGTF (ours) | 82.64 | 75.72 | 83.39 | 76.29 | 78.77 | 72.48 | 76.48 | 70.65 |
-
-Table 2 (ablation). The full DGTF row matches the accuracy columns of Table 1 for those three settings.
-
-| Method | SM-BIO | SM-BIO-CV | SM-BIO-CV-SN |
-| --- | --- | --- | --- |
-| DGTF w/o TRM | 75.48 | 72.72 | 69.07 |
-| DGTF w/o SCM | 77.42 | 62.85 | 61.92 |
-| DGTF w/o CCA | 79.97 | 76.14 | 73.55 |
-| DGTF w/o SSL | 76.81 | 70.79 | 67.77 |
-| DGTF | 83.39 | 78.77 | 76.48 |
+| **DGTF** | **82.64** | **75.72** | **83.39** | **76.29** | **78.77** | **72.48** | **76.48** | **70.65** |
 
 ## Citation
 
