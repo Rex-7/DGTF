@@ -12,6 +12,10 @@ Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and D
 
 The paper studies cross-domain decentralized graph learning (CD-DGL): parties collaborate on graph data without exchanging raw graphs. The abstract names two obstacles. Inconsistent label spaces push local models toward domain-specific bias, so domain-invariant topological knowledge is hard to extract under local supervision. Domain topology shift, together with heterogeneous model architectures, makes direct parameter aggregation infeasible. The paper uses Extended Persistent Homology (EPH) to reveal and quantify that topology shift, then introduces DGTF. As stated in the abstract, the framework has two parts: contrastive learning that extracts task-agnostic topological knowledge, and a topology-aware, model-independent fusion of that knowledge.
 
+<img alt="Figure 1 from the paper: domain gaps and an EPI similarity heatmap" src="assets/intro.png" width="760" />
+
+*(a) Challenges in CD-DGL: molecule, protein, and letter graphs are turned into extended persistence images, which show both shared topology and domain gaps. (b) Pairwise maximum mean discrepancy between those images on eight cross-domain datasets, summarizing where the topologies agree and where they differ.*
+
 This repository follows that pipeline on TUDataset graph classification. `setupGC.setup_devices_TTG` builds one `Client_GC` per dataset and sets the server to `None`. The training loop does not average client parameters. From the second communication round, each client is given the other clients' persistence-image encoder modules (`cnn` and `PI_tensor_layer`, the code's TopSE) for that round and adds a distillation loss on those modules.
 
 For every graph, `utils.compute_PI_tensor` builds a 4-channel Extended Persistence Image (EPI):
@@ -36,7 +40,7 @@ Augmentations come from `aug.py` (`drop_nodes`, `permute_edges`, `subgraph`, `ma
 
 ## Framework
 
-![DGTF framework](assets/framework.png)
+<img alt="Figure 2 from the paper: the DGTF framework" src="assets/framework.png" width="860" />
 
 *Figure 2 of the paper.* Topology-aware self-supervised learning extracts domain-invariant topology from EPIs and semantic context from node attributes with contrastive losses. Topology-aware adaptive knowledge aggregation then fuses neighboring TopSE modules without a central server. The image is a crop of that figure from the [open-access PDF](https://ojs.aaai.org/index.php/AAAI/article/download/40118/44079).
 
@@ -56,6 +60,7 @@ requirements.txt   Pinned Python packages (install needs the cu124 index)
 LICENSE            MIT license; copyright holders are the paper authors
 README.md          This file
 .gitignore         Python caches, training outputs, processed dataset files
+assets/intro.png      Crop of Figure 1 from the AAAI PDF
 assets/framework.png  Crop of Figure 2 from the AAAI PDF
 Data1/TUDataset/   Committed TU raw text, one file per line below. PyG processed/ caches are gitignored
 ```
@@ -318,18 +323,13 @@ Round log (overwritten each run, default path is the repository root because `--
 
 ## Results
 
-The numbers below are copied from the paper. They were not recomputed in this repository. The paper reports peak accuracy and macro-F1, averaged over clients (Evaluation Metrics). It sets λ = 0.3 and chooses α from {2, 4, 5}; it does not say which α was used for each column. A dash means the paper marks that method as not applicable.
-
-Table 1 does not report `bio`, `sn`, or `cv` as their own settings. Per-client bars in Figure 4 and the curves in Figure 3 are plots, so those values stay TODO.
+The numbers below are copied from the paper. They were not recomputed in this repository. The paper reports peak accuracy and macro-F1, averaged over clients (Evaluation Metrics). It sets λ = 0.3 and chooses α from {2, 4, 5}. A dash means the paper marks that method as not applicable.
 
 DGTF row of Table 1 (bold in the paper):
 
 | Setting (`data_group`) | Accuracy | Macro-F1 | Source |
 | --- | --- | --- | --- |
 | `sm` | 82.64 | 75.72 | Table 1, column SM |
-| `bio` | TODO | TODO | not a column of Table 1 or Table 2 |
-| `sn` | TODO | TODO | not a column of Table 1 or Table 2 |
-| `cv` | TODO | TODO | not a column of Table 1 or Table 2 |
 | `sm-bio` | 83.39 | 76.29 | Table 1, column SM-BIO |
 | `sm-bio-cv` | 78.77 | 72.48 | Table 1, column SM-BIO-CV |
 | `sm-bio-cv-sn` | 76.48 | 70.65 | Table 1, column SM-BIO-CV-SN |
@@ -364,7 +364,7 @@ Full comparison from Table 1. Each client owns one dataset. The paper bolds the 
 | FedSSP+FedAKT | - | - | - | - | - | - | - | - |
 | DGTF (ours) | 82.64 | 75.72 | 83.39 | 76.29 | 78.77 | 72.48 | 76.48 | 70.65 |
 
-Table 2 (ablation). The header in the paper names only the setting. The full DGTF row equals the accuracy columns of Table 1 for those three settings. The paper does not print a separate macro-F1 in Table 2.
+Table 2 (ablation). The full DGTF row matches the accuracy columns of Table 1 for those three settings.
 
 | Method | SM-BIO | SM-BIO-CV | SM-BIO-CV-SN |
 | --- | --- | --- | --- |
@@ -373,8 +373,6 @@ Table 2 (ablation). The header in the paper names only the setting. The full DGT
 | DGTF w/o CCA | 79.97 | 76.14 | 73.55 |
 | DGTF w/o SSL | 76.81 | 70.79 | 67.77 |
 | DGTF | 83.39 | 78.77 | 76.48 |
-
-<!-- TODO: Figure 3 (α, λ, and local-epoch curves) and Figure 4 (per-client bars) are plots. Do not type values off the axes. -->
 
 ## Citation
 
