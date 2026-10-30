@@ -1,16 +1,20 @@
 # DGTF: Cross-Domain Decentralized Graph Learning with Topology-Aware Knowledge Fusion
 
-[![AAAI 2026](https://img.shields.io/badge/AAAI-2026-b31b1b)](#citation)
+[![AAAI 2026](https://img.shields.io/badge/AAAI-2026-b31b1b)](https://ojs.aaai.org/index.php/AAAI/article/view/40118)
 
-Official code for the AAAI 2026 paper.
+Official code for the AAAI 2026 paper [DGTF: Cross-Domain Decentralized Graph Learning with Topology-Aware Knowledge Fusion](https://ojs.aaai.org/index.php/AAAI/article/view/40118).
 
-> Paper link: **TODO** (add the proceedings or arXiv URL).
+DOI: [10.1609/aaai.v40i34.40118](https://doi.org/10.1609/aaai.v40i34.40118).
+
+Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and Dongxiao Yu. *Proceedings of the AAAI Conference on Artificial Intelligence*, vol. 40, no. 34, pp. 28839–28847, 2026.
 
 ## Overview
 
-DGTF trains a graph classifier on TUDatasets in a cross-dataset setting. `setupGC.setup_devices_TTG` builds one `Client_GC` per dataset and sets the server to `None`. The training loop does not average client parameters. From the second communication round, each client is given the other clients' persistence-image encoder modules (`cnn` and `PI_tensor_layer`) for that round and adds a distillation loss on those modules.
+The paper studies cross-domain decentralized graph learning (CD-DGL): parties collaborate on graph data without exchanging raw graphs. The abstract names two obstacles. Inconsistent label spaces push local models toward domain-specific bias, so domain-invariant topological knowledge is hard to extract under local supervision. Domain topology shift, together with heterogeneous model architectures, makes direct parameter aggregation infeasible. The paper uses Extended Persistent Homology (EPH) to reveal and quantify that topology shift, then introduces DGTF. As stated in the abstract, the framework has two parts: contrastive learning that extracts task-agnostic topological knowledge, and a topology-aware, model-independent fusion of that knowledge.
 
-For every graph, `utils.compute_PI_tensor` builds a 4-channel persistence image:
+This repository follows that pipeline on TUDataset graph classification. `setupGC.setup_devices_TTG` builds one `Client_GC` per dataset and sets the server to `None`. The training loop does not average client parameters. From the second communication round, each client is given the other clients' persistence-image encoder modules (`cnn` and `PI_tensor_layer`, the code's TopSE) for that round and adds a distillation loss on those modules.
+
+For every graph, `utils.compute_PI_tensor` builds a 4-channel Extended Persistence Image (EPI):
 
 1. Node scores from degree, betweenness, eigenvector, and closeness centrality (`networkx`).
 2. Extended persistence via Gudhi (`gudhi.SimplexTree.extend_filtration` / `extended_persistence`).
@@ -32,11 +36,9 @@ Augmentations come from `aug.py` (`drop_nodes`, `permute_edges`, `subgraph`, `ma
 
 ## Framework
 
-<!-- TODO: add the framework figure at assets/framework.png, then uncomment the image. -->
+![DGTF framework](assets/framework.png)
 
-<!-- ![DGTF framework](assets/framework.png) -->
-
-`assets/` is reserved for that figure. The image is not in the repository yet.
+*Figure 2 of the paper.* Topology-aware self-supervised learning extracts domain-invariant topology from EPIs and semantic context from node attributes with contrastive losses. Topology-aware adaptive knowledge aggregation then fuses neighboring TopSE modules without a central server. The image is a crop of that figure from the [open-access PDF](https://ojs.aaai.org/index.php/AAAI/article/download/40118/44079).
 
 ## Repository structure
 
@@ -51,10 +53,10 @@ mlp.py             MLP blocks and MLP_output classifier
 utils.py           Persistence diagrams and images, padding, split stats
 aug.py             TUDataset_aug loader and graph augmentations
 requirements.txt   Pinned Python packages (install needs the cu124 index)
-LICENSE            MIT license; copyright holder is a TODO placeholder
+LICENSE            MIT license; copyright holders are the paper authors
 README.md          This file
 .gitignore         Python caches, training outputs, processed dataset files
-assets/.gitkeep    Placeholder directory for assets/framework.png
+assets/framework.png  Crop of Figure 2 from the AAAI PDF
 Data1/TUDataset/   Committed TU raw text, one file per line below. PyG processed/ caches are gitignored
 ```
 
@@ -316,36 +318,83 @@ Round log (overwritten each run, default path is the repository root because `--
 
 ## Results
 
-<!-- TODO: fill this table from the paper. Do not treat the cells below as measurements. -->
+The numbers below are copied from the paper. They were not recomputed in this repository. The paper reports peak accuracy and macro-F1, averaged over clients (Evaluation Metrics). It sets λ = 0.3 and chooses α from {2, 4, 5}; it does not say which α was used for each column. A dash means the paper marks that method as not applicable.
 
-| Setting | Mean accuracy | Mean macro-F1 |
-| --- | --- | --- |
-| `sm` | TODO | TODO |
-| `bio` | TODO | TODO |
-| `sn` | TODO | TODO |
-| `cv` | TODO | TODO |
-| `sm-bio` | TODO | TODO |
-| `sm-bio-cv` | TODO | TODO |
-| `sm-bio-cv-sn` | TODO | TODO |
+Table 1 does not report `bio`, `sn`, or `cv` as their own settings. Per-client bars in Figure 4 and the curves in Figure 3 are plots, so those values stay TODO.
+
+DGTF row of Table 1 (bold in the paper):
+
+| Setting (`data_group`) | Accuracy | Macro-F1 | Source |
+| --- | --- | --- | --- |
+| `sm` | 82.64 | 75.72 | Table 1, column SM |
+| `bio` | TODO | TODO | not a column of Table 1 or Table 2 |
+| `sn` | TODO | TODO | not a column of Table 1 or Table 2 |
+| `cv` | TODO | TODO | not a column of Table 1 or Table 2 |
+| `sm-bio` | 83.39 | 76.29 | Table 1, column SM-BIO |
+| `sm-bio-cv` | 78.77 | 72.48 | Table 1, column SM-BIO-CV |
+| `sm-bio-cv-sn` | 76.48 | 70.65 | Table 1, column SM-BIO-CV-SN |
+
+Full comparison from Table 1. Each client owns one dataset. The paper bolds the best entry in each column and underlines the second best; those marks are not repeated here.
+
+| Method | SM ACC | SM F1 | SM-BIO ACC | SM-BIO F1 | SM-BIO-CV ACC | SM-BIO-CV F1 | SM-BIO-CV-SN ACC | SM-BIO-CV-SN F1 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GCN+Local | 77.77 | 70.68 | 71.84 | 64.98 | 70.59 | 65.50 | 68.94 | 63.58 |
+| GCN+FML | 76.60 | 63.43 | 73.61 | 65.25 | 71.07 | 63.68 | 70.28 | 63.10 |
+| GCN+MH-PFLID | 79.65 | 73.22 | 72.71 | 65.41 | 72.84 | 66.78 | 71.07 | 63.88 |
+| GCN+FedMRL | 65.49 | 40.10 | 64.60 | 43.34 | 53.39 | 36.11 | 49.30 | 37.21 |
+| GCN+FedType | 74.21 | 60.18 | 68.03 | 56.27 | 64.71 | 55.52 | 65.91 | 55.77 |
+| GCN+FedAKT | 75.17 | 60.95 | 68.75 | 56.73 | 66.41 | 57.40 | 67.51 | 57.00 |
+| GCFL+Local | 76.47 | 65.15 | 71.89 | 62.47 | 73.98 | 66.93 | 73.75 | 66.99 |
+| GCFL+FML | 77.06 | 62.37 | 71.78 | 60.78 | 68.01 | 60.77 | 71.91 | 66.67 |
+| GCFL+MH-PFLID | 75.71 | 59.62 | 72.65 | 60.36 | 61.21 | 47.81 | 69.00 | 60.04 |
+| GCFL+FedMRL | 61.74 | 44.90 | 60.87 | 47.82 | 55.42 | 43.32 | 49.33 | 33.23 |
+| GCFL+FedType | 78.23 | 63.70 | 71.01 | 60.81 | 70.89 | 61.97 | 68.79 | 60.35 |
+| GCFL+FedAKT | 72.34 | 59.79 | 68.16 | 54.34 | 67.32 | 57.45 | 67.22 | 60.02 |
+| FedStar+Local | 77.55 | 67.69 | 75.52 | 68.37 | 75.15 | 71.37 | 72.63 | 68.54 |
+| FedStar+FML | 77.93 | 65.11 | 71.67 | 58.40 | 72.55 | 63.90 | 72.63 | 68.54 |
+| FedStar+MH-pFLID | 78.46 | 67.81 | 73.14 | 62.84 | 74.42 | 66.03 | 73.37 | 67.94 |
+| FedStar+FedMRL | 78.04 | 70.67 | 77.74 | 71.72 | 77.31 | 72.12 | 75.50 | 70.45 |
+| FedStar+FedType | 79.31 | 66.97 | 72.10 | 61.04 | 73.06 | 64.65 | 68.99 | 60.93 |
+| FedStar+FedAKT | 74.33 | 60.35 | 69.02 | 54.69 | 67.89 | 56.50 | 67.21 | 56.55 |
+| FedSSP+Local | 78.45 | 75.34 | 73.01 | 67.46 | 77.56 | 71.82 | 75.41 | 71.64 |
+| FedSSP+FML | 76.62 | 66.41 | 75.84 | 71.21 | 74.72 | 71.75 | 73.40 | 70.60 |
+| FedSSP+MH-pFLID | 80.44 | 73.85 | 78.05 | 74.83 | 77.14 | 71.32 | 74.00 | 70.11 |
+| FedSSP+FedMRL | - | - | - | - | - | - | - | - |
+| FedSSP+FedType | 79.78 | 72.53 | 72.42 | 67.80 | 76.89 | 70.13 | 73.92 | 70.22 |
+| FedSSP+FedAKT | - | - | - | - | - | - | - | - |
+| DGTF (ours) | 82.64 | 75.72 | 83.39 | 76.29 | 78.77 | 72.48 | 76.48 | 70.65 |
+
+Table 2 (ablation). The header in the paper names only the setting. The full DGTF row equals the accuracy columns of Table 1 for those three settings. The paper does not print a separate macro-F1 in Table 2.
+
+| Method | SM-BIO | SM-BIO-CV | SM-BIO-CV-SN |
+| --- | --- | --- | --- |
+| DGTF w/o TRM | 75.48 | 72.72 | 69.07 |
+| DGTF w/o SCM | 77.42 | 62.85 | 61.92 |
+| DGTF w/o CCA | 79.97 | 76.14 | 73.55 |
+| DGTF w/o SSL | 76.81 | 70.79 | 67.77 |
+| DGTF | 83.39 | 78.77 | 76.48 |
+
+<!-- TODO: Figure 3 (α, λ, and local-epoch curves) and Figure 4 (per-client bars) are plots. Do not type values off the axes. -->
 
 ## Citation
 
-<!-- TODO: replace author and pages, and add the paper URL, once the camera-ready bibliographic record is known. -->
-
 ```bibtex
-@inproceedings{dgtf2026,
+@inproceedings{zheng2026dgtf,
   title     = {DGTF: Cross-Domain Decentralized Graph Learning with Topology-Aware Knowledge Fusion},
-  author    = {TODO},
+  author    = {Zheng, Ruisheng and Li, Mingyi and Zhang, Xiao and Shi, Hongjian and Fu, Yanjie and Yuan, Yuan and Yu, Dongxiao},
   booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {40},
+  number    = {34},
+  pages     = {28839--28847},
   year      = {2026},
-  pages     = {TODO},
-  url       = {TODO}
+  doi       = {10.1609/aaai.v40i34.40118},
+  url       = {https://ojs.aaai.org/index.php/AAAI/article/view/40118}
 }
 ```
 
 ## License
 
-This repository is released under the [MIT License](LICENSE). The copyright line is `Copyright (c) 2026 TODO: copyright holder (paper authors)`. Confirm the license and replace the copyright holder before relying on it.
+This repository is released under the [MIT License](LICENSE). The copyright line is `Copyright (c) 2026 Ruisheng Zheng, Mingyi Li, Xiao Zhang, Hongjian Shi, Yanjie Fu, Yuan Yuan, and Dongxiao Yu`. The AAAI PDF itself is copyrighted by the Association for the Advancement of Artificial Intelligence. Confirm that MIT is the license you want for this code before relying on it.
 
 ## Acknowledgements
 
